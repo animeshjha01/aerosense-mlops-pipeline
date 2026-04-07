@@ -1,13 +1,13 @@
+import os
+import shutil
+
 import chromadb
 
-# 1. Initialize ChromaDB (This creates a local folder called 'chroma_data' to save the DB)
-chroma_client = chromadb.PersistentClient(path="./chroma_data")
 
-# Create or load the collection (table) for our logs
-collection = chroma_client.get_or_create_collection(name="maintenance_logs")
+DB_PATH = "./chroma_data"
+COLLECTION_NAME = "maintenance_logs"
 
-# 2. Write the 15 Fake Maintenance Logs
-logs = [
+LOGS = [
     "Engine temperature exceeded 100 degrees; replaced cooling fan.",
     "High vibration detected in rotor; realigned the main shaft.",
     "Pressure dropped below 30 psi; patched leak in the hydraulic line.",
@@ -22,28 +22,50 @@ logs = [
     "Random temperature fluctuations; replaced faulty thermostat.",
     "Harsh vibration on startup; tightened engine mounting bolts.",
     "Drop in fluid pressure; replaced the O-ring seals.",
-    "Complete system overheating; replaced the central radiator."
+    "Complete system overheating; replaced the central radiator.",
 ]
 
-# 3. Embed and Store the Logs (Only if the database is empty)
-if collection.count() == 0:
-    print("Initializing Vector DB... Embedding 15 maintenance logs.")
-    collection.add(
-        documents=logs,
-        ids=[f"log_{i}" for i in range(len(logs))],
-        metadatas=[{"type": "repair"} for _ in range(len(logs))]
-    )
-    print("Vector DB successfully populated!")
+_collection = None
 
-# 4. The Search Function
+
+def _create_or_load_collection():
+    chroma_client = chromadb.PersistentClient(path=DB_PATH)
+    collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+
+    if collection.count() == 0:
+        print("Initializing Vector DB... Embedding 15 maintenance logs.")
+        collection.add(
+            documents=LOGS,
+            ids=[f"log_{i}" for i in range(len(LOGS))],
+            metadatas=[{"type": "repair"} for _ in range(len(LOGS))],
+        )
+        print("Vector DB successfully populated!")
+
+    return collection
+
+
+def _get_collection():
+    global _collection
+
+    if _collection is not None:
+        return _collection
+
+    try:
+        _collection = _create_or_load_collection()
+        return _collection
+    except BaseException:
+        # Recover from a corrupted/incompatible local Chroma store by rebuilding it.
+        if os.path.isdir(DB_PATH):
+            shutil.rmtree(DB_PATH, ignore_errors=True)
+        _collection = _create_or_load_collection()
+        return _collection
+
+
 def get_maintenance_suggestions(sensor_data_summary: str):
     """
     Takes a description of the anomaly (e.g., "High temp and vibration")
     and returns the top 3 most relevant historical fixes.
     """
-    results = collection.query(
-        query_texts=[sensor_data_summary],
-        n_results=3
-    )
-    # Return just the list of 3 text documents
-    return results['documents'][0]
+    collection = _get_collection()
+    results = collection.query(query_texts=[sensor_data_summary], n_results=3)
+    return results["documents"][0]
