@@ -2,25 +2,46 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
+import os
+# Import your RAG function from your other file
 from rag_engine import get_maintenance_suggestions
 
 app = FastAPI(title="AeroSense IoT Diagnostic API")
 
-# This tells the API to allow our future web dashboard to talk to it
+# --- CORS SETUP ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all web domains
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows POST, GET, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Load the new 8-feature model
-model = joblib.load("model.joblib")
+# Load the model
+# Using a try/except here helps debug if the file is missing on Render
+try:
+    model = joblib.load("model.joblib")
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Failed to load model: {e}")
+
+# Upgraded Schema for 8 features
+class SensorData(BaseModel):
+    Temperature: float
+    Vibration: float
+    Pressure: float
+    Speed: float
+    RPM: float
+    Odometer: float
+    Battery_Voltage: float
+    Outside_Temp: float
+
+@app.get("/")
+def home():
+    return {"status": "AeroSense API is Online", "docs": "/docs"}
 
 @app.post("/predict")
 def predict_status(data: SensorData):
-    # Pass all 8 features to the AI model
     input_data = [[
         data.Temperature,
         data.Vibration,
@@ -34,10 +55,8 @@ def predict_status(data: SensorData):
 
     prediction = model.predict(input_data)[0]
 
-    # If the AI detects anything other than "Normal", trigger the RAG Engine
     if prediction != "Normal":
-        # We give the RAG engine the specific failure type so it gives highly accurate advice!
-        query_text = f"Vehicle diagnosed with {prediction}. Current sensors: Temp {data.Temperature}C, Battery {data.Battery_Voltage}V, Pressure {data.Pressure}PSI."
+        query_text = f"Vehicle diagnosed with {prediction}. Temp: {data.Temperature}C, Battery: {data.Battery_Voltage}V, Pressure: {data.Pressure}PSI."
         fixes = get_maintenance_suggestions(query_text)
         return {
             "prediction": prediction,
