@@ -35,9 +35,10 @@ def predict_status(data: SensorData):
 
     prediction = model.predict(input_data)[0]
 
-    # If the AI detects an anomaly, trigger the ChromaDB RAG Engine
-    if prediction == "Anomaly":
-        query_text = f"Engine running hot at {data.Temperature}C with intense vibration {data.Vibration} and dying battery {data.Battery_Voltage}V."
+    # If the AI detects anything other than "Normal", trigger the RAG Engine
+    if prediction != "Normal":
+        # We give the RAG engine the specific failure type so it gives highly accurate advice!
+        query_text = f"Vehicle diagnosed with {prediction}. Current sensors: Temp {data.Temperature}C, Battery {data.Battery_Voltage}V, Pressure {data.Pressure}PSI."
         fixes = get_maintenance_suggestions(query_text)
         return {
             "prediction": prediction,
@@ -46,5 +47,5 @@ def predict_status(data: SensorData):
 
     return {
         "prediction": prediction,
-        "recommended_fixes": ["System operating normally. Have a safe drive."]
+        "recommended_fixes": ["System healthy. All telemetry within normal parameters."]
     }
