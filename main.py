@@ -1,23 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 from rag_engine import get_maintenance_suggestions
 
 app = FastAPI(title="AeroSense IoT Diagnostic API")
 
+# This tells the API to allow our future web dashboard to talk to it
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all web domains
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows POST, GET, etc.
+    allow_headers=["*"],  # Allows all headers
+)
+
 # Load the new 8-feature model
 model = joblib.load("model.joblib")
-
-# Upgraded Schema to match the new OBD-II sensor data
-class SensorData(BaseModel):
-    Temperature: float
-    Vibration: float
-    Pressure: float
-    Speed: float
-    RPM: float
-    Odometer: float
-    Battery_Voltage: float
-    Outside_Temp: float
 
 @app.post("/predict")
 def predict_status(data: SensorData):
